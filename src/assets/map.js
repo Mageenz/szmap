@@ -2,7 +2,7 @@ export default {
   visualMap: [
     {
       min: 1,
-      max: 200,
+      max: 1000,
       text:['High','Low'],
       realtime: false,
       calculable: true,
@@ -36,7 +36,7 @@ export default {
   },
   series: [
     {
-      name: '自然深圳',
+      name: '地图',
       type: 'map',
       data: [],
       geoIndex: 0,

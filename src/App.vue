@@ -3,9 +3,10 @@
     <div class="head">
       <img class="img-title" src="./assets/imgTitleBg.png" alt="" />
       <img class="img-logo" src="./assets/imgLogo.png" alt="" />
+      <img class="img-logo2" src="./assets/imgLogo2.png" alt="" />
       <div class="text">
-        <!-- <div>自然是深圳数据综合看板</div> -->
-        <!-- <div>Shenzhen data comprehensive Kanban</div> -->
+        <div>自然是深圳数据综合看板</div>
+        <div>Shenzhen data comprehensive Kanban</div>
       </div>
       <div class="time">
         <img class="icon-time" src="./assets/iconTime.png" alt="">
@@ -29,17 +30,17 @@
           />
         </div>
         <div class="bar">
-          <div class="first-area">
-            <div class="title">福田区</div>
+          <div class="first-area" v-if="firstStreet">
+            <div class="title">{{firstStreet.area.name}}</div>
             <div class="info">
-              <span>松岗街道</span>
-              <span>328</span>
+              <span>{{firstStreet.name}}</span>
+              <span>{{firstStreet.count}}</span>
               <span>票</span>
             </div>
             <div class="info">
-              <span>松岗街道</span>
-              <span>328</span>
-              <span>票</span>
+              <span>票数占比</span>
+              <span>{{firstStreet.p}}</span>
+              <span>%</span>
             </div>
           </div>
           <v-chart
@@ -56,9 +57,9 @@
             <span>Place summary</span>
           </div>
           <div class="list">
-            <div class="item-place" v-for="item in 7">
-              <span>居民区</span>
-              <span>345</span>
+            <div class="item-place" v-for="item in locationList" :key="item.id">
+              <span>{{item.name}}</span>
+              <span>{{item.count}}</span>
               <span>票</span>
             </div>
           </div>
@@ -70,11 +71,13 @@
             <span>Place summary</span>
           </div>
           <div class="list">
-            <div class="item-area" v-for="item in 10">
-              <span>1</span>
-              <span>龙岗区</span>
-              <span>345</span>
-              <span></span>
+            <div class="item-area" v-for="(item, index) in areaList" :key="item.id">
+              <span>{{index + 1}}</span>
+              <span>{{item.name}}</span>
+              <span>{{item.value}}</span>
+              <div>
+                <span :style="{width: item.width}"></span>
+              </div>
             </div>
           </div>
         </div>
@@ -84,6 +87,7 @@
 </template>
 
 <script>
+import axios from 'axios';
 import ECharts from 'vue-echarts'
 import moment from 'moment';
 import 'echarts/lib/chart/map'
@@ -111,8 +115,24 @@ export default {
       barOptions,
       time: '',
       show: false,
-      changeData: []
+      changeData: [],
+
+      locationList: [],
+      areaList: [],
+      streetList: []
     }
+  },
+  computed: {
+    firstStreet() {
+      if(this.streetList.length) {
+        const first = this.streetList[0]
+        const total = this.streetList.reduce((p, c) => p + c.count , 0)
+
+        first.p = parseInt(first.count / total * 100)
+        first.area = this.areaList.find(i => first.code.indexOf(i.id) > -1)
+        return first
+      }
+    },
   },
   mounted() {
     this.initTime();
@@ -120,61 +140,111 @@ export default {
   },
   methods: {
     getData() {
-      this.mapOptions.series[0].data = [
-        {id: 1, name: '光明区', value: 30},
-        {id: 2, name: '宝安区', value: 2},
-        {id: 3, name: '龙华区', value: 30},
-        {id: 4, name: '南山区', value: 180},
-        {id: 5, name: '福田区', value: 130},
-        {id: 6, name: '龙岗区', value: 2},
-        {id: 7, name: '罗湖区', value: 60},
-        {id: 8, name: '坪山区', value: 150},
-        {id: 9, name: '盐田区', value: 1},
-      ];
-      this.formatChangeData();
-
-      return;
-      setInterval(this.formatChangeData, 3000)
+      this.formatChangeData(() => {
+        setInterval(this.formatChangeData, 3000);
+      });
     },
-    formatChangeData() {
-      const prevData = this.mapOptions.series[0].data;
-      const currentData = prevData.map(item => {
-        return {
-          id: item.id,
-          name: item.name,
-          value: item.value + parseInt(Math.random() * 10)
-        }
-      });
-      this.mapOptions.series[0].data = currentData;
+    formatChangeData(cb) {
+      const prevData = this.areaList;
 
-      const changeData = currentData.map(item => {
-        const matched = prevData.find(t => t.id === item.id);
-        const changeValue = item.value - matched.value;
+      axios.get('/api/location/count').then(res => {
+        const {locations, areas} = res.data.data
+        const streetList = [];
 
-        if(changeValue > 0) {
-          const data = {
-            ...item,
-            changeValue,
-            show: true
-          };
-          setTimeout(() => {
-            data.show = false;
-          }, 1100)
-          return data;
-        } else {
+        this.locationList = locations.sort((a, b) => b.count - a.count);
+        
+        const areaList = areas.map(item => {
+          const streets = item.districts.map(s => ({
+            name: s.name,
+            value: s.location ? s.location.concat(s.value) : [],
+            count: s.count,
+            code: s.code
+          }))
+
+          streetList.push(...streets)
           return {
-            ...item,
-            changeValue: 0,
-            show: false
+            id: item.code,
+            name: item.name,
+            value: item.count
           }
-        }
-      });
-      changeData.push({
-        id: 100,
-        name: '龙岗区',
-      })
+        }).sort((a, b) => b.value - a.value)
 
-      this.changeData = changeData;
+        areaList.map(i => {
+          const first = areaList[0];
+
+          i.width = first.value ? `${(i.value/first.value)*100}%` : '0'
+          return i;
+        });
+
+        this.mapOptions.series[1].data = this.streetList = streetList.sort((a, b) => b.count - a.count)
+        this.mapOptions.series[0].data = this.areaList = areaList
+
+        const ten = this.streetList.slice(0, 10);
+
+        this.barOptions = {
+          ...this.barOptions,
+          xAxis: {
+            data: ten.map(i => ({
+              value: i.name
+            })),
+            axisTick: {
+              show: false
+            },
+            axisLabel: {
+              interval: 0,
+              color: '#fff',
+            },
+          },
+          series: [
+            {
+              type: 'bar',
+              name: '街道排名',
+              barWidth: 20,
+              barGap: '150%',
+              itemStyle: {
+                color: '#DEAF33'
+              },
+              data: ten.map(i => ({
+                name: i.name,
+                value: i.count
+              }))
+            }
+          ]
+        }
+
+        if(cb) {
+          cb()
+        } else {
+          const changeData = this.areaList.map(item => {
+            const matched = prevData.find(t => t.id === item.id);
+            const changeValue = item.value - matched.value;
+
+            if(changeValue > 0) {
+              const data = {
+                ...item,
+                changeValue,
+                show: true
+              };
+              setTimeout(() => {
+                data.show = false;
+              }, 1100)
+              return data;
+            } else {
+              return {
+                ...item,
+                changeValue: 0,
+                show: false
+              }
+            }
+          });
+          changeData.push({
+            id: 100,
+            name: '龙岗区',
+          })
+
+          this.changeData = changeData;
+        }
+      })
     },
     initTime() {
       this.time = moment().format('YYYY-MM-DD hh:mm:ss');
@@ -195,7 +265,7 @@ export default {
 }
 html, body, .container {
   height: 100%;
-  font-family:MicrosoftYaHei;
+  font-family: '微软雅黑';
 }
 .container {
   background-image: url(./assets/imgBg.png);
@@ -214,6 +284,12 @@ html, body, .container {
     position: absolute;
     top: 10px;
     left: 40px;
+    width: 136px;
+  }
+  .img-logo2 {
+    position: absolute;
+    top: 10px;
+    left: 210px;
     width: 136px;
   }
   .text {
@@ -282,31 +358,31 @@ html, body, .container {
         color: #fff;
       }
     }
-    .tip.tip1 {
+    .tip.tip440311 {
       left: 17%;
       top: 13%;
     }
-    .tip.tip2 {
+    .tip.tip440306 {
       top: 30%;
       left: 11%;
     }
-    .tip.tip3 {
+    .tip.tip440309 {
       top: 25%;
       left: 23%;
     }
-    .tip.tip4 {
+    .tip.tip440305 {
       top: 48%;
       left: 17%;
     }
-    .tip.tip6 {
+    .tip.tip440307 {
       top: 20%;
       left: 40%;
     }
-    .tip.tip8 {
+    .tip.tip440310 {
       top: 25%;
       left: 47%;
     }
-    .tip.tip9 {
+    .tip.tip440308 {
       top: 40%;
       left: 41%;
     }
@@ -314,11 +390,11 @@ html, body, .container {
       top: 45%;
       left: 58%;
     }
-    .tip.tip5 {
+    .tip.tip440304 {
       top: 46%;
       left: 25%;
     }
-    .tip.tip7 {
+    .tip.tip440303 {
       top: 43%;
       left:32%;
     }
@@ -442,20 +518,25 @@ html, body, .container {
         span:nth-child(3) {
           width: 100px;
         }
-        span:nth-child(4) {
-          height: 10px;
-          background:linear-gradient(90deg,rgba(217,106,26,1) 0%,rgba(227,222,68,1) 100%);
-          border-radius:6px;
+        div {
           flex: 1;
+          span {
+            display: block;
+            height: 10px;
+            background:linear-gradient(90deg,rgba(217,106,26,1) 0%,rgba(227,222,68,1) 100%);
+            border-radius:6px;
+          }
         }
       }
       .item-area:last-child {
         margin-bottom: 0;
       }
       .item-area:nth-child(n+4) {
-        span:nth-child(4) {
-          background:linear-gradient(90deg,rgba(135,55,226,1) 0%,rgba(49,156,224,1) 100%);
-          border-radius:6px;
+        div{
+          span {
+            background:linear-gradient(90deg,rgba(135,55,226,1) 0%,rgba(49,156,224,1) 100%);
+            border-radius:6px;
+          }
         }
       }
     }
